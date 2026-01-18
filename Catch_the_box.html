@@ -3,37 +3,46 @@
 <head>
 <meta charset="UTF-8">
 <title>Catch the Box</title>
-
 <style>
 body {
   margin: 0;
   background: #111;
   color: white;
   font-family: Arial, sans-serif;
+  height: 100vh;
+  overflow: hidden;
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100vh;
-  touch-action: none;
+}
+
+/* Buttons */
+button {
+  padding: 10px 20px;
+  font-size: 16px;
+  margin-left: 10px;
+}
+
+#pauseBtn, #settingsBtn {
+  position: fixed;
+  top: 10px;
+  z-index: 10;
+}
+#pauseBtn { left: 10px; }
+#settingsBtn { right: 10px; }
+
+#gameWrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 canvas {
   border: 2px solid white;
+  transform-origin: center center;
 }
 
-button {
-  padding: 10px 20px;
-  font-size: 16px;
-}
-
-#pauseBtn, #settingsBtn {
-  position: absolute;
-  top: 10px;
-}
-
-#pauseBtn { left: 10px; }
-#settingsBtn { right: 10px; }
-
+/* Overlays */
 .overlay {
   position: fixed;
   inset: 0;
@@ -41,6 +50,7 @@ button {
   display: none;
   justify-content: center;
   align-items: center;
+  z-index: 20;
 }
 
 .menu {
@@ -56,6 +66,7 @@ button {
   cursor: pointer;
 }
 
+/* Color bars */
 .colorBar {
   width: 200px;
   height: 20px;
@@ -74,14 +85,21 @@ button {
   position: absolute;
   top: 1px;
 }
+
+/* Zoom slider */
+input[type=range] {
+  width: 100%;
+}
 </style>
 </head>
-
 <body>
 
 <button id="pauseBtn">Pause</button>
 <button id="settingsBtn">Settings</button>
-<canvas id="game" width="400" height="600"></canvas>
+
+<div id="gameWrapper">
+  <canvas id="game" width="400" height="600"></canvas>
+</div>
 
 <!-- MAIN MENU -->
 <div class="overlay" id="mainMenu" style="display:flex;">
@@ -99,6 +117,10 @@ button {
     <span class="close" onclick="closeSettings()">✖</span>
     <h3>Settings</h3>
 
+    <p>Zoom</p>
+    <input id="zoomSlider" type="range" min="0.5" max="2" step="0.05" value="1">
+    <button onclick="resetZoom()">Default Zoom</button>
+
     <p>Box Color</p>
     <div class="colorBar" data-target="box"><div class="colorPicker"></div></div>
 
@@ -107,36 +129,31 @@ button {
 
     <p>Background Color</p>
     <div class="colorBar" data-target="bg"><div class="colorPicker"></div></div>
-
-    <p>Drag paddle to move</p>
   </div>
 </div>
 
 <script>
-/* ---------- CANVAS ---------- */
+/* ---------- VARIABLES ---------- */
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
+const zoomSlider = document.getElementById("zoomSlider");
 
-/* ---------- STATE ---------- */
-let gameState = "menu"; // menu | playing | paused | gameover
+let paddle, box, score;
+let gameState = "menu";
 let stateBeforeSettings = "menu";
 let mode = "normal";
 
-/* ---------- OBJECTS ---------- */
-let paddle, box, score;
-let dragging = false;
-const keys = {};
-
-/* ---------- COLORS ---------- */
 let boxColor = "#ff4d4d";
 let paddleColor = "#00ffee";
 let bgColor = "#222";
 
-/* ---------- SCORE ---------- */
+let zoom = 1;
+let keys = {};
+let dragging = false;
 let highScore = Number(localStorage.getItem("highScore") || 0);
 let beatHighScore = false;
 
-/* ---------- INIT ---------- */
+/* ---------- GAME FUNCTIONS ---------- */
 function init() {
   paddle = { x: 160, y: 570, w: 80, h: 15, speed: 7 };
   box = { x: Math.random() * 370, y: 0, s: 30, speed: 2.5 };
@@ -144,7 +161,6 @@ function init() {
   beatHighScore = false;
 }
 
-/* ---------- START GAME ---------- */
 function startGame(m) {
   mode = m;
   document.getElementById("mainMenu").style.display = "none";
@@ -152,18 +168,15 @@ function startGame(m) {
   gameState = "playing";
 }
 
-/* ---------- UPDATE ---------- */
 function update() {
   if ((keys.ArrowLeft || keys.a) && paddle.x > 0) paddle.x -= paddle.speed;
   if ((keys.ArrowRight || keys.d) && paddle.x < canvas.width - paddle.w) paddle.x += paddle.speed;
 
   box.y += box.speed;
 
-  if (
-    box.y + box.s >= paddle.y &&
-    box.x + box.s >= paddle.x &&
-    box.x <= paddle.x + paddle.w
-  ) {
+  if (box.y + box.s >= paddle.y &&
+      box.x + box.s >= paddle.x &&
+      box.x <= paddle.x + paddle.w) {
     score++;
     box.y = 0;
     box.x = Math.random() * (canvas.width - box.s);
@@ -181,18 +194,17 @@ function update() {
   }
 }
 
-/* ---------- DRAW ---------- */
 function draw() {
   ctx.fillStyle = bgColor;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0,0,canvas.width,canvas.height);
 
   if (gameState === "menu") return;
 
   ctx.fillStyle = paddleColor;
-  ctx.fillRect(paddle.x, paddle.y, paddle.w, paddle.h);
+  ctx.fillRect(paddle.x,paddle.y,paddle.w,paddle.h);
 
   ctx.fillStyle = boxColor;
-  ctx.fillRect(box.x, box.y, box.s, box.s);
+  ctx.fillRect(box.x,box.y,box.s,box.s);
 
   ctx.fillStyle = "white";
   ctx.font = "18px Arial";
@@ -211,17 +223,10 @@ function draw() {
     ctx.fillText("GAME OVER", 100, 280);
     ctx.font = "20px Arial";
     ctx.fillStyle = "white";
-    ctx.fillText("Final Score: " + score, 120, 320);
-    if (beatHighScore) {
-      ctx.fillStyle = "yellow";
-      ctx.fillText("New High Score!", 100, 350);
-    }
-    ctx.fillStyle = "white";
-    ctx.fillText("Tap/click to return to menu", 50, 390);
+    ctx.fillText("Tap/click to return to menu", 50, 350);
   }
 }
 
-/* ---------- LOOP ---------- */
 function loop() {
   if (gameState === "playing") update();
   draw();
@@ -229,49 +234,10 @@ function loop() {
 }
 loop();
 
-/* ---------- POINTER ---------- */
-function handlePointerStart(e) {
-  e.preventDefault();
-
-  if (gameState === "gameover") {
-    gameState = "menu";
-    document.getElementById("mainMenu").style.display = "flex";
-    return;
-  }
-
-  if (gameState !== "playing") return;
-
-  dragging = true;
-  const x = e.touches ? e.touches[0].clientX : e.clientX;
-  movePaddle(x);
-}
-
-function handlePointerMove(e) {
-  if (!dragging || gameState !== "playing") return;
-  const x = e.touches ? e.touches[0].clientX : e.clientX;
-  movePaddle(x);
-}
-
-function handlePointerEnd() {
-  dragging = false;
-}
-
-function movePaddle(x) {
-  const rect = canvas.getBoundingClientRect();
-  paddle.x = x - rect.left - paddle.w / 2;
-  paddle.x = Math.max(0, Math.min(canvas.width - paddle.w, paddle.x));
-}
-
-canvas.addEventListener("mousedown", handlePointerStart);
-canvas.addEventListener("mousemove", handlePointerMove);
-canvas.addEventListener("mouseup", handlePointerEnd);
-canvas.addEventListener("touchstart", handlePointerStart);
-canvas.addEventListener("touchmove", handlePointerMove);
-canvas.addEventListener("touchend", handlePointerEnd);
-
-/* ---------- KEYBOARD ---------- */
+/* ---------- INPUT HANDLERS ---------- */
 document.addEventListener("keydown", e => {
   keys[e.key] = true;
+
   if (e.key.toLowerCase() === "e") {
     if (gameState === "playing") gameState = "paused";
     else if (gameState === "paused") gameState = "playing";
@@ -279,7 +245,35 @@ document.addEventListener("keydown", e => {
 });
 document.addEventListener("keyup", e => keys[e.key] = false);
 
-/* ---------- SETTINGS ---------- */
+/* ---------- POINTER / TOUCH ---------- */
+function movePaddle(e) {
+  const rect = canvas.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  paddle.x = (clientX - rect.left) / zoom - paddle.w / 2;
+  paddle.x = Math.max(0, Math.min(canvas.width - paddle.w, paddle.x));
+}
+
+canvas.addEventListener("mousedown", e => {
+  if (gameState !== "playing") return;
+  dragging = true;
+  movePaddle(e);
+});
+canvas.addEventListener("mousemove", e => { if (dragging) movePaddle(e); });
+canvas.addEventListener("mouseup", () => dragging = false);
+canvas.addEventListener("touchstart", e => {
+  if (gameState !== "playing") return;
+  dragging = true;
+  movePaddle(e);
+});
+canvas.addEventListener("touchmove", e => { if (dragging) movePaddle(e); });
+canvas.addEventListener("touchend", () => dragging = false);
+
+/* ---------- PAUSE & SETTINGS ---------- */
+document.getElementById("pauseBtn").onclick = () => {
+  if (gameState === "playing") gameState = "paused";
+  else if (gameState === "paused") gameState = "playing";
+};
+
 document.getElementById("settingsBtn").onclick = () => {
   stateBeforeSettings = gameState;
   gameState = "paused";
@@ -291,28 +285,31 @@ function closeSettings() {
   gameState = stateBeforeSettings;
 }
 
-/* ---------- PAUSE BUTTON ---------- */
-document.getElementById("pauseBtn").onclick = () => {
-  if (gameState === "playing") gameState = "paused";
-  else if (gameState === "paused") gameState = "playing";
+/* ---------- ZOOM ---------- */
+zoomSlider.oninput = e => {
+  zoom = Number(e.target.value);
+  canvas.style.transform = `scale(${zoom})`;
 };
 
-/* ---------- COLOR PICKERS (DRAGGABLE) ---------- */
+function resetZoom() {
+  zoom = 1;
+  zoomSlider.value = 1;
+  canvas.style.transform = "scale(1)";
+}
+
+/* ---------- COLOR PICKERS ---------- */
 document.querySelectorAll(".colorBar").forEach(bar => {
   let active = false;
 
-  function updateColor(e) {
+  function pick(e) {
     if (!active) return;
     e.preventDefault();
 
     const rect = bar.getBoundingClientRect();
-    const x = Math.max(
-      0,
-      Math.min(
-        rect.width,
-        (e.touches ? e.touches[0].clientX : e.clientX) - rect.left
-      )
-    );
+    const x = Math.max(0, Math.min(
+      rect.width,
+      (e.touches ? e.touches[0].clientX : e.clientX) - rect.left
+    ));
 
     bar.querySelector(".colorPicker").style.left = (x - 8) + "px";
 
@@ -320,14 +317,13 @@ document.querySelectorAll(".colorBar").forEach(bar => {
     temp.canvas.width = rect.width;
     temp.canvas.height = 1;
 
-    const g = temp.createLinearGradient(0, 0, rect.width, 0);
-    ["red","orange","yellow","green","cyan","blue","violet"]
-      .forEach((c,i)=>g.addColorStop(i/6,c));
+    const g = temp.createLinearGradient(0,0,rect.width,0);
+    ["red","orange","yellow","green","cyan","blue","violet"].forEach((c,i)=>g.addColorStop(i/6,c));
 
     temp.fillStyle = g;
-    temp.fillRect(0, 0, rect.width, 1);
+    temp.fillRect(0,0,rect.width,1);
 
-    const d = temp.getImageData(x, 0, 1, 1).data;
+    const d = temp.getImageData(x,0,1,1).data;
     const color = `rgb(${d[0]},${d[1]},${d[2]})`;
 
     if (bar.dataset.target === "box") boxColor = color;
@@ -335,16 +331,27 @@ document.querySelectorAll(".colorBar").forEach(bar => {
     if (bar.dataset.target === "bg") bgColor = color;
   }
 
-  bar.addEventListener("mousedown", e => { active = true; updateColor(e); });
-  bar.addEventListener("touchstart", e => { active = true; updateColor(e); });
-
-  document.addEventListener("mousemove", updateColor);
-  document.addEventListener("touchmove", updateColor);
-
+  bar.addEventListener("mousedown", e => { active = true; pick(e); });
+  bar.addEventListener("touchstart", e => { active = true; pick(e); });
+  document.addEventListener("mousemove", pick);
+  document.addEventListener("touchmove", pick);
   document.addEventListener("mouseup", () => active = false);
   document.addEventListener("touchend", () => active = false);
 });
-</script>
 
+/* ---------- GAMEOVER TAP ---------- */
+canvas.addEventListener("mousedown", e => {
+  if (gameState === "gameover") {
+    gameState = "menu";
+    document.getElementById("mainMenu").style.display = "flex";
+  }
+});
+canvas.addEventListener("touchstart", e => {
+  if (gameState === "gameover") {
+    gameState = "menu";
+    document.getElementById("mainMenu").style.display = "flex";
+  }
+});
+</script>
 </body>
 </html>
