@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>Catch the Box</title>
+
 <style>
 body {
   margin: 0;
@@ -13,7 +14,7 @@ body {
   justify-content: center;
   align-items: center;
   height: 100vh;
-  touch-action: none; /* IMPORTANT for mobile dragging */
+  touch-action: none;
 }
 
 canvas {
@@ -23,16 +24,15 @@ canvas {
 button {
   padding: 10px 20px;
   font-size: 16px;
-  margin-left: 10px;
 }
 
-#settingsBtn, #pauseBtn {
+#pauseBtn, #settingsBtn {
   position: absolute;
   top: 10px;
 }
 
-#settingsBtn { right: 10px; }
 #pauseBtn { left: 10px; }
+#settingsBtn { right: 10px; }
 
 .overlay {
   position: fixed;
@@ -63,6 +63,7 @@ button {
   border-radius: 10px;
   background: linear-gradient(to right, red, orange, yellow, green, cyan, blue, violet);
   position: relative;
+  touch-action: none;
 }
 
 .colorPicker {
@@ -75,6 +76,7 @@ button {
 }
 </style>
 </head>
+
 <body>
 
 <button id="pauseBtn">Pause</button>
@@ -111,24 +113,38 @@ button {
 </div>
 
 <script>
+/* ---------- CANVAS ---------- */
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-let paddle, box, score;
+/* ---------- STATE ---------- */
 let gameState = "menu"; // menu | playing | paused | gameover
+let stateBeforeSettings = "menu";
 let mode = "normal";
 
+/* ---------- OBJECTS ---------- */
+let paddle, box, score;
+let dragging = false;
+const keys = {};
+
+/* ---------- COLORS ---------- */
 let boxColor = "#ff4d4d";
 let paddleColor = "#00ffee";
 let bgColor = "#222";
 
+/* ---------- SCORE ---------- */
 let highScore = Number(localStorage.getItem("highScore") || 0);
 let beatHighScore = false;
 
-const keys = {};
-let dragging = false;
+/* ---------- INIT ---------- */
+function init() {
+  paddle = { x: 160, y: 570, w: 80, h: 15, speed: 7 };
+  box = { x: Math.random() * 370, y: 0, s: 30, speed: 2.5 };
+  score = 0;
+  beatHighScore = false;
+}
 
-/* ---------- GAME ---------- */
+/* ---------- START GAME ---------- */
 function startGame(m) {
   mode = m;
   document.getElementById("mainMenu").style.display = "none";
@@ -136,21 +152,13 @@ function startGame(m) {
   gameState = "playing";
 }
 
-function init() {
-  paddle = { x: 160, y: 570, w: 80, h: 15, speed: 7 };
-  box = { x: Math.random()*(canvas.width-30), y: 0, s: 30, speed: 2.5 };
-  score = 0;
-  beatHighScore = false;
-}
-
+/* ---------- UPDATE ---------- */
 function update() {
-  // Keyboard controls
   if ((keys.ArrowLeft || keys.a) && paddle.x > 0) paddle.x -= paddle.speed;
   if ((keys.ArrowRight || keys.d) && paddle.x < canvas.width - paddle.w) paddle.x += paddle.speed;
 
   box.y += box.speed;
 
-  // Catch box
   if (
     box.y + box.s >= paddle.y &&
     box.x + box.s >= paddle.x &&
@@ -158,12 +166,11 @@ function update() {
   ) {
     score++;
     box.y = 0;
-    box.x = Math.random()*(canvas.width - box.s);
+    box.x = Math.random() * (canvas.width - box.s);
     if (mode === "normal") box.speed += 0.15;
     if (mode === "hard") box.speed += 0.5;
   }
 
-  // Missed box -> game over
   if (box.y > canvas.height) {
     gameState = "gameover";
     if (score > highScore) {
@@ -174,9 +181,10 @@ function update() {
   }
 }
 
+/* ---------- DRAW ---------- */
 function draw() {
   ctx.fillStyle = bgColor;
-  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   if (gameState === "menu") return;
 
@@ -191,28 +199,29 @@ function draw() {
   ctx.fillText("Score: " + score, 10, 30);
   ctx.fillText("High Score: " + highScore, 10, 55);
 
-  if (gameState === "gameover") {
-    ctx.fillStyle = "red";
-    ctx.font = "30px Arial";
-    ctx.fillText("GAME OVER", 105, 280);
-    ctx.font = "20px Arial";
-    ctx.fillStyle = "white";
-    ctx.fillText("Final Score: " + score, 125, 320);
-    if (beatHighScore) {
-      ctx.fillStyle = "yellow";
-      ctx.fillText("You beat your high score!", 60, 355);
-    }
-    ctx.fillStyle = "white";
-    ctx.fillText("Tap/click to restart", 90, 390);
-  }
-
   if (gameState === "paused") {
     ctx.fillStyle = "yellow";
     ctx.font = "30px Arial";
-    ctx.fillText("PAUSED", 145, 300);
+    ctx.fillText("PAUSED", 140, 300);
+  }
+
+  if (gameState === "gameover") {
+    ctx.fillStyle = "red";
+    ctx.font = "30px Arial";
+    ctx.fillText("GAME OVER", 100, 280);
+    ctx.font = "20px Arial";
+    ctx.fillStyle = "white";
+    ctx.fillText("Final Score: " + score, 120, 320);
+    if (beatHighScore) {
+      ctx.fillStyle = "yellow";
+      ctx.fillText("New High Score!", 100, 350);
+    }
+    ctx.fillStyle = "white";
+    ctx.fillText("Tap/click to return to menu", 50, 390);
   }
 }
 
+/* ---------- LOOP ---------- */
 function loop() {
   if (gameState === "playing") update();
   draw();
@@ -220,27 +229,27 @@ function loop() {
 }
 loop();
 
-/* ---------- POINTER HANDLING ---------- */
+/* ---------- POINTER ---------- */
 function handlePointerStart(e) {
   e.preventDefault();
-  const touchX = e.touches ? e.touches[0].clientX : e.clientX;
-  
+
   if (gameState === "gameover") {
-    init();
-    gameState = "playing";
+    gameState = "menu";
+    document.getElementById("mainMenu").style.display = "flex";
     return;
   }
 
-  if (gameState === "playing") {
-    dragging = true;
-    movePaddle(touchX);
-  }
+  if (gameState !== "playing") return;
+
+  dragging = true;
+  const x = e.touches ? e.touches[0].clientX : e.clientX;
+  movePaddle(x);
 }
 
 function handlePointerMove(e) {
   if (!dragging || gameState !== "playing") return;
-  const touchX = e.touches ? e.touches[0].clientX : e.clientX;
-  movePaddle(touchX);
+  const x = e.touches ? e.touches[0].clientX : e.clientX;
+  movePaddle(x);
 }
 
 function handlePointerEnd() {
@@ -253,7 +262,6 @@ function movePaddle(x) {
   paddle.x = Math.max(0, Math.min(canvas.width - paddle.w, paddle.x));
 }
 
-// Attach pointer events
 canvas.addEventListener("mousedown", handlePointerStart);
 canvas.addEventListener("mousemove", handlePointerMove);
 canvas.addEventListener("mouseup", handlePointerEnd);
@@ -264,68 +272,77 @@ canvas.addEventListener("touchend", handlePointerEnd);
 /* ---------- KEYBOARD ---------- */
 document.addEventListener("keydown", e => {
   keys[e.key] = true;
-
-  // Press E to toggle pause
-  if (e.key.toLowerCase() === "e" && gameState === "playing") {
-    gameState = "paused";
-  } else if (e.key.toLowerCase() === "e" && gameState === "paused") {
-    gameState = "playing";
+  if (e.key.toLowerCase() === "e") {
+    if (gameState === "playing") gameState = "paused";
+    else if (gameState === "paused") gameState = "playing";
   }
 });
-
 document.addEventListener("keyup", e => keys[e.key] = false);
 
 /* ---------- SETTINGS ---------- */
 document.getElementById("settingsBtn").onclick = () => {
-  if (gameState === "playing") gameState = "paused";
+  stateBeforeSettings = gameState;
+  gameState = "paused";
   document.getElementById("settingsMenu").style.display = "flex";
 };
 
 function closeSettings() {
   document.getElementById("settingsMenu").style.display = "none";
-  if (gameState === "paused") gameState = "playing";
+  gameState = stateBeforeSettings;
 }
 
 /* ---------- PAUSE BUTTON ---------- */
 document.getElementById("pauseBtn").onclick = () => {
-  if (gameState === "playing") {
-    gameState = "paused";
-  } else if (gameState === "paused") {
-    gameState = "playing";
-  }
+  if (gameState === "playing") gameState = "paused";
+  else if (gameState === "paused") gameState = "playing";
 };
 
-/* ---------- COLOR PICKERS ---------- */
+/* ---------- COLOR PICKERS (DRAGGABLE) ---------- */
 document.querySelectorAll(".colorBar").forEach(bar => {
-  bar.addEventListener("mousedown", pickColor);
-  bar.addEventListener("touchstart", pickColor);
+  let active = false;
 
-  function pickColor(e) {
+  function updateColor(e) {
+    if (!active) return;
     e.preventDefault();
-    const picker = bar.querySelector(".colorPicker");
+
     const rect = bar.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const x = Math.max(0, Math.min(rect.width, clientX - rect.left));
-    picker.style.left = (x - 8) + "px";
+    const x = Math.max(
+      0,
+      Math.min(
+        rect.width,
+        (e.touches ? e.touches[0].clientX : e.clientX) - rect.left
+      )
+    );
+
+    bar.querySelector(".colorPicker").style.left = (x - 8) + "px";
 
     const temp = document.createElement("canvas").getContext("2d");
     temp.canvas.width = rect.width;
     temp.canvas.height = 1;
 
-    const g = temp.createLinearGradient(0,0,rect.width,0);
+    const g = temp.createLinearGradient(0, 0, rect.width, 0);
     ["red","orange","yellow","green","cyan","blue","violet"]
       .forEach((c,i)=>g.addColorStop(i/6,c));
 
     temp.fillStyle = g;
-    temp.fillRect(0,0,rect.width,1);
+    temp.fillRect(0, 0, rect.width, 1);
 
-    const d = temp.getImageData(x,0,1,1).data;
+    const d = temp.getImageData(x, 0, 1, 1).data;
     const color = `rgb(${d[0]},${d[1]},${d[2]})`;
 
     if (bar.dataset.target === "box") boxColor = color;
     if (bar.dataset.target === "paddle") paddleColor = color;
     if (bar.dataset.target === "bg") bgColor = color;
   }
+
+  bar.addEventListener("mousedown", e => { active = true; updateColor(e); });
+  bar.addEventListener("touchstart", e => { active = true; updateColor(e); });
+
+  document.addEventListener("mousemove", updateColor);
+  document.addEventListener("touchmove", updateColor);
+
+  document.addEventListener("mouseup", () => active = false);
+  document.addEventListener("touchend", () => active = false);
 });
 </script>
 
